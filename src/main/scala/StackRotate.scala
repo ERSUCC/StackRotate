@@ -18,37 +18,41 @@ class StackRotate extends PlugIn {
 
     val dialog = new GenericDialog("Stack Rotate")
 
-    dialog.addImageChoice("Select stack to align:", WindowManager.getImageTitles()(0))
+    dialog.addImageChoice("Select reference image:", null)
+    dialog.addImageChoice("Select image/stack to align:", null)
     dialog.addCheckbox("Write transformations to log", false)
     dialog.showDialog()
 
     if (dialog.wasOKed) {
-      val image = dialog.getNextImage()
+      val refImage = dialog.getNextImage()
+      val stackImage = dialog.getNextImage()
       val log = dialog.getNextBoolean()
 
-      if (image.getImageStackSize() < 2)
-        return IJ.error("Stack Rotate", "The selected image is not a stack.")
+      val refType = refImage.getType()
 
-      val tpe = image.getType()
+      if (refType == ImagePlus.COLOR_256 || refType == ImagePlus.COLOR_RGB)
+        return IJ.error("Stack Rotate", "The selected reference image is not grayscale.")
 
-      if (tpe == ImagePlus.COLOR_256 || tpe == ImagePlus.COLOR_RGB)
-        return IJ.error("Stack Rotate", "The selected image is not grayscale.")
+      val stackType = stackImage.getType()
 
-      val stack = image.getImageStack()
+      if (stackType == ImagePlus.COLOR_256 || stackType == ImagePlus.COLOR_RGB)
+        return IJ.error("Stack Rotate", "The selected stack is not grayscale.")
+
+      val stack = stackImage.getImageStack()
       val slices = stack.size()
 
-      IJ.showProgress(0, slices)
+      IJ.showProgress(0, slices + 1)
 
-      val refImage = prepareImage(stack.getProcessor(1))
-      val refAngle = getAngle(refImage)
-      val (refX, refY) = getCenter(refImage)
+      val refPrepared = prepareImage(refImage.getProcessor())
+      val refAngle = getAngle(refPrepared)
+      val (refX, refY) = getCenter(refPrepared)
 
       if (log)
         IJ.log(s"Reference:\nRotation: $refAngle degrees\nCenter X: $refX pixels\nCenter Y: $refY pixels")
 
-      IJ.showProgress(1, slices)
+      IJ.showProgress(1, slices + 1)
 
-      for (i <- 2 to slices) {
+      for (i <- 1 to slices) {
         val processor = stack.getProcessor(i)
         val prepared = prepareImage(processor)
 
@@ -66,10 +70,10 @@ class StackRotate extends PlugIn {
         if (log)
           IJ.log(s"Slice $i:\nRotation: $angleDiff degrees\nTranslation X: $xDiff pixels\nTranslation Y: $yDiff pixels")
 
-        IJ.showProgress(i, slices)
+        IJ.showProgress(i + 1, slices + 1)
       }
 
-      image.updateAndDraw()
+      stackImage.updateAndDraw()
     }
   }
 
