@@ -18,9 +18,9 @@ libraryDependencies ++= Seq(
   "sc.fiji" % "Auto_Local_Threshold" % "1.11.0"
 )
 
-val packageAndCopy = InputKey[Unit]("packageAndCopy", "Package and copy the compiled jar to the specified directory")
+val packageTo = InputKey[Unit]("packageTo", "Package and copy the compiled jar to the specified directory")
 
-packageAndCopy := {
+packageTo := {
   val path = Paths.get((Space ~> StringBasic).parsed)
 
   if (!Files.exists(path))
