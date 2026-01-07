@@ -20,12 +20,14 @@ class StackRotate extends PlugIn {
 
     dialog.addImageChoice("Select reference image:", null)
     dialog.addImageChoice("Select image/stack to align:", null)
+    dialog.addNumericField("Minimum angle to rotate:", 0)
     dialog.addCheckbox("Write transformations to log", false)
     dialog.showDialog()
 
     if (dialog.wasOKed) {
       val refImage = dialog.getNextImage()
       val stackImage = dialog.getNextImage()
+      val minAngle = dialog.getNextNumber()
       val log = dialog.getNextBoolean()
 
       val refType = refImage.getType()
@@ -59,16 +61,20 @@ class StackRotate extends PlugIn {
         val angle = getAngle(prepared)
         val angleDiff = angle - refAngle
 
-        processor.rotate(angleDiff)
+        if (angleDiff.abs >= minAngle) {
+          processor.rotate(angleDiff)
 
-        val (x, y) = getCenter(prepared)
-        val xDiff = refX - x
-        val yDiff = refY - y
+          val (x, y) = getCenter(prepared)
+          val xDiff = refX - x
+          val yDiff = refY - y
 
-        processor.translate(xDiff, yDiff)
+          processor.translate(xDiff, yDiff)
 
-        if (log)
-          IJ.log(s"Slice $i:\nRotation: $angleDiff degrees\nTranslation X: $xDiff pixels\nTranslation Y: $yDiff pixels")
+          if (log)
+            IJ.log(s"Slice $i:\nRotation: $angleDiff degrees\nTranslation X: $xDiff pixels\nTranslation Y: $yDiff pixels")
+        } else if (log) {
+          IJ.log(s"Slice $i:\nSkipped")
+        }
 
         IJ.showProgress(i + 1, slices + 1)
       }
