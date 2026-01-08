@@ -8,6 +8,8 @@ import ij.plugin.PlugIn
 import ij.process.ImageProcessor
 
 import java.awt.Color
+import java.io.PrintWriter
+import java.nio.file.{ Files, Paths }
 
 import scala.math.{ atan, toDegrees }
 
@@ -18,68 +20,115 @@ class StackRotate extends PlugIn {
 
     val dialog = new GenericDialog("Stack Rotate")
 
-    dialog.addImageChoice("Select reference image:", null)
+    Option(WindowManager.getActiveWindow).foreach(window => dialog.setIconImages(window.getIconImages()))
+
+    dialog.addChoice("Select reference image:", "--" +: WindowManager.getImageTitles(), null)
+    dialog.addFileField("Import transformations from file:", null)
     dialog.addImageChoice("Select image/stack to align:", null)
     dialog.addNumericField("Minimum angle to rotate:", 0)
-    dialog.addCheckbox("Write transformations to log", false)
+    dialog.addDirectoryField("Save transformations to directory:", null)
     dialog.showDialog()
 
     if (dialog.wasOKed) {
-      val refImage = dialog.getNextImage()
+      val refTitle = dialog.getNextChoice()
+      val importRef = Option(dialog.getNextString()).filter(_.trim.nonEmpty).map(Paths.get(_))
       val stackImage = dialog.getNextImage()
       val minAngle = dialog.getNextNumber()
-      val log = dialog.getNextBoolean()
+      val outDir = Option(dialog.getNextString()).filter(_.trim.nonEmpty).map(Paths.get(_))
 
-      val refType = refImage.getType()
+      if (outDir.exists(!Files.exists(_)))
+        return IJ.error("Stack Rotate", s"The specified output path does not exist.")
 
-      if (refType == ImagePlus.COLOR_256 || refType == ImagePlus.COLOR_RGB)
-        return IJ.error("Stack Rotate", "The selected reference image is not grayscale.")
+      if (outDir.exists(!Files.isDirectory(_)))
+        return IJ.error("Stack Rotate", s"The specified output path is not a directory.")
 
-      val stackType = stackImage.getType()
+      val out = outDir.map(dir => new PrintWriter(dir.resolve(s"stack_rotate_${System.currentTimeMillis}.csv").toFile))
 
-      if (stackType == ImagePlus.COLOR_256 || stackType == ImagePlus.COLOR_RGB)
-        return IJ.error("Stack Rotate", "The selected stack is not grayscale.")
+      importRef match {
+        case Some(refPath) =>
+          if (!Files.exists(refPath))
+            return IJ.error("Stack Rotate", "The specified input path does not exist.")
 
-      val stack = stackImage.getImageStack()
-      val slices = stack.size()
+          if (!Files.isRegularFile(refPath))
+            return IJ.error("Stack Rotate", "The specified input path is not a file.")
 
-      IJ.showProgress(0, slices + 1)
+          val refContents = Files.readAllLines(refPath).toArray(Array[String]()).map(_.split(',').flatMap(_.toDoubleOption))
 
-      val refPrepared = prepareImage(refImage.getProcessor())
-      val refAngle = getAngle(refPrepared)
-      val (refX, refY) = getCenter(refPrepared)
+          if (refContents.exists(_.size != 3))
+            return IJ.error("Stack Rotate", "The specified transformation file is formatted incorrectly.")
 
-      if (log)
-        IJ.log(s"Reference:\nRotation: $refAngle degrees\nCenter X: $refX pixels\nCenter Y: $refY pixels")
+          val stack = stackImage.getImageStack()
+          val slices = stack.size()
 
-      IJ.showProgress(1, slices + 1)
+          if (refContents.size != slices)
+            return IJ.error("Stack Rotate", "The specified transformation file has a different number of slices than the selected stack.")
 
-      for (i <- 1 to slices) {
-        val processor = stack.getProcessor(i)
-        val prepared = prepareImage(processor)
+          IJ.showProgress(0, slices)
 
-        val angle = getAngle(prepared)
-        val angleDiff = angle - refAngle
+          for (i <- 1 to slices) {
+            val processor = stack.getProcessor(i)
+            val ref = refContents(i - 1)
 
-        if (angleDiff.abs >= minAngle) {
-          processor.rotate(angleDiff)
+            processor.rotate(ref(0))
+            processor.translate(ref(1), ref(2))
 
-          val (x, y) = getCenter(prepared)
-          val xDiff = refX - x
-          val yDiff = refY - y
+            IJ.showProgress(i, slices)
+          }
 
-          processor.translate(xDiff, yDiff)
+        case _ =>
+          if (refTitle == "--")
+            return IJ.error("Stack Rotate", "You must specify either a reference image or a transformation file.")
 
-          if (log)
-            IJ.log(s"Slice $i:\nRotation: $angleDiff degrees\nTranslation X: $xDiff pixels\nTranslation Y: $yDiff pixels")
-        } else if (log) {
-          IJ.log(s"Slice $i:\nSkipped")
-        }
+          val refImage = WindowManager.getImage(refTitle)
+          val refType = refImage.getType()
 
-        IJ.showProgress(i + 1, slices + 1)
+          if (refType == ImagePlus.COLOR_256 || refType == ImagePlus.COLOR_RGB)
+            return IJ.error("Stack Rotate", "The selected reference image is not grayscale.")
+
+          val stackType = stackImage.getType()
+
+          if (stackType == ImagePlus.COLOR_256 || stackType == ImagePlus.COLOR_RGB)
+            return IJ.error("Stack Rotate", "The selected stack is not grayscale.")
+
+          val stack = stackImage.getImageStack()
+          val slices = stack.size()
+
+          IJ.showProgress(0, slices + 1)
+
+          val refPrepared = prepareImage(refImage.getProcessor())
+          val refAngle = getAngle(refPrepared)
+          val (refX, refY) = getCenter(refPrepared)
+
+          IJ.showProgress(1, slices + 1)
+
+          for (i <- 1 to slices) {
+            val processor = stack.getProcessor(i)
+            val prepared = prepareImage(processor)
+
+            val angle = getAngle(prepared)
+            val angleDiff = angle - refAngle
+
+            if (angleDiff.abs >= minAngle) {
+              processor.rotate(angleDiff)
+
+              val (x, y) = getCenter(prepared)
+              val xDiff = refX - x
+              val yDiff = refY - y
+
+              processor.translate(xDiff, yDiff)
+
+              out.foreach(_.println(s"$angleDiff,$xDiff,$yDiff"))
+            } else {
+              out.foreach(_.println("0,0,0"))
+            }
+
+            IJ.showProgress(i + 1, slices + 1)
+          }
       }
 
       stackImage.updateAndDraw()
+
+      out.foreach(_.close())
     }
   }
 
