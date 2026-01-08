@@ -34,15 +34,6 @@ class StackRotate extends PlugIn {
       val importRef = Option(dialog.getNextString()).filter(_.trim.nonEmpty).map(Paths.get(_))
       val stackImage = dialog.getNextImage()
       val minAngle = dialog.getNextNumber()
-      val outDir = Option(dialog.getNextString()).filter(_.trim.nonEmpty).map(Paths.get(_))
-
-      if (outDir.exists(!Files.exists(_)))
-        return IJ.error("Stack Rotate", s"The specified output path does not exist.")
-
-      if (outDir.exists(!Files.isDirectory(_)))
-        return IJ.error("Stack Rotate", s"The specified output path is not a directory.")
-
-      val out = outDir.map(dir => new PrintWriter(dir.resolve(s"stack_rotate_${System.currentTimeMillis}.csv").toFile))
 
       importRef match {
         case Some(refPath) =>
@@ -90,6 +81,16 @@ class StackRotate extends PlugIn {
           if (stackType == ImagePlus.COLOR_256 || stackType == ImagePlus.COLOR_RGB)
             return IJ.error("Stack Rotate", "The selected stack is not grayscale.")
 
+          val outDir = Option(dialog.getNextString()).filter(_.trim.nonEmpty).map(Paths.get(_))
+
+          if (outDir.exists(!Files.exists(_)))
+            return IJ.error("Stack Rotate", s"The specified output path does not exist.")
+
+          if (outDir.exists(!Files.isDirectory(_)))
+            return IJ.error("Stack Rotate", s"The specified output path is not a directory.")
+
+          val out = outDir.map(dir => new PrintWriter(dir.resolve(s"stack_rotate_${System.currentTimeMillis}.csv").toFile))
+
           val stack = stackImage.getImageStack()
           val slices = stack.size()
 
@@ -124,11 +125,11 @@ class StackRotate extends PlugIn {
 
             IJ.showProgress(i + 1, slices + 1)
           }
+
+          out.foreach(_.close())
       }
 
       stackImage.updateAndDraw()
-
-      out.foreach(_.close())
     }
   }
 
