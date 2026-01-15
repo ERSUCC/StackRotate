@@ -43,10 +43,7 @@ class StackRotate extends PlugIn {
           if (!Files.isRegularFile(refPath))
             return IJ.error("Stack Rotate", "The specified input path is not a file.")
 
-          val refContents = Files.readAllLines(refPath).toArray(Array[String]()).map(_.split(',').flatMap(_.toDoubleOption))
-
-          if (refContents.exists(_.size != 3))
-            return IJ.error("Stack Rotate", "The specified transformation file is formatted incorrectly.")
+          val refContents = Files.readAllLines(refPath).toArray(Array[String]()).flatMap(_.toDoubleOption)
 
           val stack = stackImage.getImageStack()
           val slices = stack.size()
@@ -57,11 +54,7 @@ class StackRotate extends PlugIn {
           IJ.showProgress(0, slices)
 
           for (i <- 1 to slices) {
-            val processor = stack.getProcessor(i)
-            val ref = refContents(i - 1)
-
-            processor.rotate(ref(0))
-            processor.translate(ref(1), ref(2))
+            stack.getProcessor(i).rotate(refContents(i - 1))
 
             IJ.showProgress(i, slices)
           }
@@ -89,7 +82,7 @@ class StackRotate extends PlugIn {
           if (outDir.exists(!Files.isDirectory(_)))
             return IJ.error("Stack Rotate", s"The specified output path is not a directory.")
 
-          val out = outDir.map(dir => new PrintWriter(dir.resolve(s"stack_rotate_${System.currentTimeMillis}.csv").toFile))
+          val out = outDir.map(dir => new PrintWriter(dir.resolve(s"${stackImage.getTitle()}.csv").toFile))
 
           val stack = stackImage.getImageStack()
           val slices = stack.size()
@@ -98,7 +91,6 @@ class StackRotate extends PlugIn {
 
           val refPrepared = prepareImage(refImage.getProcessor())
           val refAngle = getAngle(refPrepared)
-          val (refX, refY) = getCenter(refPrepared)
 
           IJ.showProgress(1, slices + 1)
 
@@ -112,15 +104,9 @@ class StackRotate extends PlugIn {
             if (angleDiff.abs >= minAngle) {
               processor.rotate(angleDiff)
 
-              val (x, y) = getCenter(prepared)
-              val xDiff = refX - x
-              val yDiff = refY - y
-
-              processor.translate(xDiff, yDiff)
-
-              out.foreach(_.println(s"$angleDiff,$xDiff,$yDiff"))
+              out.foreach(_.println(angleDiff))
             } else {
-              out.foreach(_.println("0,0,0"))
+              out.foreach(_.println(0))
             }
 
             IJ.showProgress(i + 1, slices + 1)
@@ -160,17 +146,6 @@ class StackRotate extends PlugIn {
     val slope = (n * xs.zip(ys).map(_ * _).sum - xsum * ysum) / (n * xs.map(x => x * x).sum - xsum * xsum)
 
     toDegrees(atan(slope))
-  }
-
-  private def getCenter(processor: ImageProcessor): (Int, Int) = {
-    val width = processor.getWidth()
-
-    val indices = getIndices(processor)
-
-    val xs = indices.map(_ % width)
-    val ys = indices.map(_ / width)
-
-    (xs.sum / xs.size, ys.sum / ys.size)
   }
 
   private def getIndices(processor: ImageProcessor): Seq[Int] = {
