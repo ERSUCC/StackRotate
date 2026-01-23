@@ -22,9 +22,9 @@ class StackRotate extends PlugIn {
 
     Option(WindowManager.getActiveWindow).foreach(window => dialog.setIconImages(window.getIconImages()))
 
-    dialog.addChoice("Select reference image:", "--" +: WindowManager.getImageTitles(), null)
+    dialog.addChoice("Reference image:", "--" +: WindowManager.getImageTitles(), null)
     dialog.addFileField("Import transformations from file:", null)
-    dialog.addImageChoice("Select image/stack to align:", null)
+    dialog.addImageChoice("Image/stack to align:", null)
     dialog.addNumericField("Minimum angle to rotate:", 0)
     dialog.addDirectoryField("Save transformations to directory:", null)
     dialog.showDialog()
